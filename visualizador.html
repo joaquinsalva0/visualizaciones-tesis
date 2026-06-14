@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Visualizador — Frame a Frame</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: system-ui, sans-serif;
+      background: #0f172a;
+      color: #e2e8f0;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── Sticky panel ── */
+    #panel {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: #1e293b;
+      border-bottom: 1px solid #334155;
+      padding: 10px 16px 8px;
+      flex-shrink: 0;
+    }
+
+    #panel-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: #94a3b8;
+      margin-bottom: 8px;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+
+    /* ── Matrix ── */
+    #matrix-wrap { overflow-x: auto; }
+
+    #matrix {
+      border-collapse: separate;
+      border-spacing: 3px;
+      user-select: none;
+    }
+
+    #matrix th {
+      font-size: 11px;
+      color: #64748b;
+      padding: 2px 4px;
+      text-align: center;
+      white-space: nowrap;
+      font-weight: 500;
+    }
+
+    #matrix th.row-header {
+      text-align: right;
+      padding-right: 8px;
+      color: #94a3b8;
+      font-weight: 600;
+    }
+
+    #matrix th.col-header-label {
+      font-size: 10px;
+      color: #475569;
+      padding-bottom: 0;
+    }
+
+    .cell {
+      width: 40px;
+      height: 26px;
+      border-radius: 5px;
+      cursor: pointer;
+      background: #1e3a5f;
+      border: 1px solid #2d4a6f;
+      transition: background 0.08s, border-color 0.08s;
+    }
+
+    .cell:hover           { background: #2d5a8f; border-color: #4a7abf; }
+    .cell.selected        { background: #16a34a; border-color: #22c55e; }
+    .cell.selected:hover  { background: #15803d; border-color: #4ade80; }
+
+    /* ── Controls ── */
+    #controls {
+      margin-top: 8px;
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .btn {
+      padding: 4px 14px;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.03em;
+    }
+
+    #btn-all  { background: #16a34a; color: #fff; }
+    #btn-none { background: #dc2626; color: #fff; }
+    #btn-all:hover  { background: #15803d; }
+    #btn-none:hover { background: #b91c1c; }
+
+    #count {
+      font-size: 12px;
+      color: #64748b;
+      margin-left: 4px;
+    }
+
+    #axis-labels {
+      font-size: 10px;
+      color: #475569;
+      margin-left: auto;
+    }
+
+    /* ── Image grid ── */
+    #images-wrap {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px;
+    }
+
+    #images {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+      gap: 14px;
+    }
+
+    .img-card {
+      background: #1e293b;
+      border-radius: 8px;
+      overflow: hidden;
+      border: 1px solid #334155;
+    }
+
+    .img-header {
+      padding: 6px 12px;
+      background: #0f172a;
+      display: flex;
+      gap: 16px;
+      align-items: center;
+      border-bottom: 1px solid #1e3a5f;
+    }
+
+    .img-header .tag {
+      font-size: 12px;
+      color: #94a3b8;
+    }
+
+    .img-header .tag span {
+      color: #38bdf8;
+      font-weight: 700;
+    }
+
+    .img-card img {
+      width: 100%;
+      display: block;
+    }
+
+    #empty-msg {
+      grid-column: 1 / -1;
+      padding: 60px 20px;
+      text-align: center;
+      color: #334155;
+      font-size: 15px;
+    }
+
+    #empty-msg strong { color: #475569; }
+  </style>
+</head>
+<body>
+
+<!-- ═══ Sticky matrix panel ═══ -->
+<div id="panel">
+  <div id="panel-title">Frame a Frame — Seleccioná combinaciones</div>
+
+  <div id="matrix-wrap">
+    <table id="matrix"></table>
+  </div>
+
+  <div id="controls">
+    <button class="btn" id="btn-all">Seleccionar todo</button>
+    <button class="btn" id="btn-none">Limpiar</button>
+    <span id="count">Ninguna seleccionada</span>
+    <span id="axis-labels">filas = k (constante de restricción) · columnas = d (distancia a la interfaz)</span>
+  </div>
+</div>
+
+<!-- ═══ Scrollable image area ═══ -->
+<div id="images-wrap">
+  <div id="images">
+    <div id="empty-msg">
+      <strong>Arrastrá el mouse sobre la matriz</strong> para seleccionar combinaciones
+    </div>
+  </div>
+</div>
+
+<script>
+  const K_VALUES = [50, 100, 250, 500, 1000, 2000, 3000, 4000];
+  const D_VALUES = ["0", "0.37", "0.74", "1.11", "1.48", "1.86", "2.07"];
+
+  const FOLDER = "frame%20a%20frame%2056%20combinaciones";
+
+  function dToFilename(d) {
+    // "0" → "d0", "0.37" → "d0p37"
+    return "d" + d.replace(".", "p");
+  }
+
+  function imgPath(k, d) {
+    return `${FOLDER}/frameAframe_k${k}_${dToFilename(d)}.png`;
+  }
+
+  function cellId(k, d) { return `cell_${k}_${d.replace(".", "_")}`; }
+  function cellKey(k, d) { return `${k}|||${d}`; }
+  function parseKey(key) { const [k, d] = key.split("|||"); return { k: Number(k), d }; }
+
+  const selected = new Set();
+  let isDragging = false;
+  let dragMode = null; // 'select' | 'deselect'
+
+  // ── Build matrix ──
+  function buildMatrix() {
+    const table = document.getElementById("matrix");
+
+    // Header row: d values
+    let html = `<thead><tr>
+      <th class="row-header" style="font-size:10px;color:#475569">k \\ d →</th>`;
+    D_VALUES.forEach(d => {
+      html += `<th class="col-header">${d}</th>`;
+    });
+    html += `</tr></thead><tbody>`;
+
+    K_VALUES.forEach(k => {
+      html += `<tr><th class="row-header">${k}</th>`;
+      D_VALUES.forEach(d => {
+        const id = cellId(k, d);
+        html += `<td class="cell" id="${id}" data-k="${k}" data-d="${d}"></td>`;
+      });
+      html += `</tr>`;
+    });
+
+    html += `</tbody>`;
+    table.innerHTML = html;
+
+    // Event listeners
+    document.querySelectorAll(".cell").forEach(cell => {
+      cell.addEventListener("mousedown", e => {
+        e.preventDefault();
+        isDragging = true;
+        const key = cellKey(cell.dataset.k, cell.dataset.d);
+        dragMode = selected.has(key) ? "deselect" : "select";
+        applyDrag(cell);
+      });
+      cell.addEventListener("mouseover", () => {
+        if (isDragging) applyDrag(cell);
+      });
+    });
+
+    document.addEventListener("mouseup", () => { isDragging = false; });
+  }
+
+  function applyDrag(cell) {
+    const key = cellKey(cell.dataset.k, cell.dataset.d);
+    if (dragMode === "select") {
+      selected.add(key);
+      cell.classList.add("selected");
+    } else {
+      selected.delete(key);
+      cell.classList.remove("selected");
+    }
+    scheduleUpdate();
+  }
+
+  // Debounce image update while dragging for smoothness
+  let updateTimer = null;
+  function scheduleUpdate() {
+    clearTimeout(updateTimer);
+    updateTimer = setTimeout(updateImages, 40);
+  }
+
+  function updateImages() {
+    const countEl = document.getElementById("count");
+    const container = document.getElementById("images");
+
+    countEl.textContent = selected.size === 0
+      ? "Ninguna seleccionada"
+      : `${selected.size} combinación${selected.size === 1 ? "" : "es"} seleccionada${selected.size === 1 ? "" : "s"}`;
+
+    if (selected.size === 0) {
+      container.innerHTML = `<div id="empty-msg"><strong>Arrastrá el mouse sobre la matriz</strong> para seleccionar combinaciones</div>`;
+      return;
+    }
+
+    // Sort: k ascending, then d ascending
+    const pairs = [...selected].map(parseKey);
+    pairs.sort((a, b) => {
+      if (a.k !== b.k) return a.k - b.k;
+      return D_VALUES.indexOf(a.d) - D_VALUES.indexOf(b.d);
+    });
+
+    container.innerHTML = pairs.map(({ k, d }) => {
+      const path = imgPath(k, d);
+      return `
+        <div class="img-card">
+          <div class="img-header">
+            <div class="tag">k = <span>${k}</span></div>
+            <div class="tag">d = <span>${d}</span></div>
+          </div>
+          <img src="${path}" alt="k=${k} d=${d}" loading="lazy"
+               onerror="this.closest('.img-card').style.display='none'">
+        </div>`;
+    }).join("");
+  }
+
+  // ── Buttons ──
+  document.getElementById("btn-all").addEventListener("click", () => {
+    document.querySelectorAll(".cell").forEach(cell => {
+      selected.add(cellKey(cell.dataset.k, cell.dataset.d));
+      cell.classList.add("selected");
+    });
+    updateImages();
+  });
+
+  document.getElementById("btn-none").addEventListener("click", () => {
+    selected.clear();
+    document.querySelectorAll(".cell").forEach(cell => cell.classList.remove("selected"));
+    updateImages();
+  });
+
+  buildMatrix();
+</script>
+</body>
+</html>
