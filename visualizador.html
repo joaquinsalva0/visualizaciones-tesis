@@ -169,24 +169,96 @@
     }
 
     #empty-msg strong { color: #475569; }
+
+    /* ── Collapse toggle ── */
+    #panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 8px;
+    }
+
+    #btn-toggle {
+      background: #334155;
+      border: none;
+      color: #94a3b8;
+      font-size: 12px;
+      font-weight: 600;
+      padding: 3px 10px;
+      border-radius: 5px;
+      cursor: pointer;
+      letter-spacing: 0.03em;
+    }
+    #btn-toggle:hover { background: #475569; color: #e2e8f0; }
+
+    #panel-body { overflow: hidden; transition: max-height 0.25s ease; }
+    #panel-body.collapsed { max-height: 0 !important; }
+
+    /* ── Lightbox ── */
+    #lightbox {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.85);
+      z-index: 999;
+      align-items: center;
+      justify-content: center;
+      cursor: zoom-out;
+    }
+    #lightbox.open { display: flex; }
+
+    #lightbox img {
+      max-width: 92vw;
+      max-height: 90vh;
+      border-radius: 8px;
+      box-shadow: 0 0 40px rgba(0,0,0,0.7);
+      cursor: default;
+    }
+
+    #lightbox-label {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(15,23,42,0.9);
+      color: #94a3b8;
+      font-size: 13px;
+      padding: 6px 16px;
+      border-radius: 20px;
+      pointer-events: none;
+    }
+
+    .img-card { cursor: pointer; }
+    .img-card:hover { border-color: #38bdf8; }
   </style>
 </head>
 <body>
 
 <!-- ═══ Sticky matrix panel ═══ -->
 <div id="panel">
-  <div id="panel-title">Frame a Frame — Seleccioná combinaciones</div>
-
-  <div id="matrix-wrap">
-    <table id="matrix"></table>
+  <div id="panel-header">
+    <div id="panel-title">Frame a Frame — Seleccioná combinaciones</div>
+    <button id="btn-toggle">▲ Ocultar</button>
   </div>
 
-  <div id="controls">
-    <button class="btn" id="btn-all">Seleccionar todo</button>
-    <button class="btn" id="btn-none">Limpiar</button>
-    <span id="count">Ninguna seleccionada</span>
-    <span id="axis-labels">filas = k (constante de restricción) · columnas = d (distancia a la interfaz)</span>
+  <div id="panel-body">
+    <div id="matrix-wrap">
+      <table id="matrix"></table>
+    </div>
+
+    <div id="controls">
+      <button class="btn" id="btn-all">Seleccionar todo</button>
+      <button class="btn" id="btn-none">Limpiar</button>
+      <span id="count">Ninguna seleccionada</span>
+      <span id="axis-labels">filas = k (constante de restricción) · columnas = d (distancia a la interfaz)</span>
+    </div>
   </div>
+</div>
+
+<!-- ═══ Lightbox ═══ -->
+<div id="lightbox">
+  <img id="lightbox-img" src="" alt="">
+  <div id="lightbox-label"></div>
 </div>
 
 <!-- ═══ Scrollable image area ═══ -->
@@ -304,7 +376,7 @@
     container.innerHTML = pairs.map(({ k, d }) => {
       const path = imgPath(k, d);
       return `
-        <div class="img-card">
+        <div class="img-card" onclick="openLightbox('${path}','${k}','${d}')">
           <div class="img-header">
             <div class="tag">k = <span>${k}</span></div>
             <div class="tag">d = <span>${d}</span></div>
@@ -314,6 +386,36 @@
         </div>`;
     }).join("");
   }
+
+  // ── Collapse panel ──
+  const panelBody = document.getElementById("panel-body");
+  const btnToggle = document.getElementById("btn-toggle");
+  panelBody.style.maxHeight = panelBody.scrollHeight + "px";
+
+  btnToggle.addEventListener("click", () => {
+    const collapsed = panelBody.classList.toggle("collapsed");
+    btnToggle.textContent = collapsed ? "▼ Mostrar" : "▲ Ocultar";
+    if (!collapsed) panelBody.style.maxHeight = panelBody.scrollHeight + "px";
+  });
+
+  // ── Lightbox ──
+  const lightbox = document.getElementById("lightbox");
+  const lightboxImg = document.getElementById("lightbox-img");
+  const lightboxLabel = document.getElementById("lightbox-label");
+
+  function openLightbox(src, k, d) {
+    lightboxImg.src = src;
+    lightboxLabel.textContent = `k = ${k}   ·   d = ${d}`;
+    lightbox.classList.add("open");
+  }
+
+  lightbox.addEventListener("click", e => {
+    if (e.target === lightbox) lightbox.classList.remove("open");
+  });
+
+  document.addEventListener("keydown", e => {
+    if (e.key === "Escape") lightbox.classList.remove("open");
+  });
 
   // ── Buttons ──
   document.getElementById("btn-all").addEventListener("click", () => {
